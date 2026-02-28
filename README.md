@@ -18,3 +18,13 @@ Moving beyond traditional `if-else` logic, this project utilizes **Weighted Erro
 -  **PD Closed-Loop Control:** Utilizes Proportional (P) and Derivative (D) controllers to output dynamic differential PWM to the motors. The Integral (I) term was intentionally discarded to prevent system oscillation and lag, ensuring ultra-fast response times.
 -   **Sharp Turn State Machine Lock:** When the outermost sensors trigger the maximum error threshold, the system forces a "tank-style pivot" mode. This state lock is only released once the robot is centered again, allowing it to perfectly conquer 90-degree and acute angle turns.
 -  **Two-Stage Lost-Line Recovery:** Introduces a lost-line timer. A brief signal loss (< 150ms) triggers a gentle correction; a complete track deviation (> 150ms) triggers a strong reverse recovery maneuver based on the last known error memory.
+## pin mapping
+| Module | Pin Function | STM32 Pin | Notes |
+| :--- | :--- | :--- | :--- |
+| **HC-SR04** | Trig  | `PA10` | Out Push Pull |
+| **HC-SR04** | Echo  | `PA0` | TIM2_CH1/TIM2_CH2 |
+| **L298N** | ENA | `PA8` | PWM |
+| **L298N** | ENB  | `PA9` | PWM |
+| **L298N** | IN1 - IN4 | `GPIO 4-7` | Out Push Pull |
+| **YB-MUX04-1.0(I2C)** | SCL  | `PB8` | I2C  |
+| **YB-MUX04-1.0(I2C)** | SDA  | `PB9` | I2C  |
