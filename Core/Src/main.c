@@ -51,6 +51,7 @@
 int left_speed;
 int right_spped;
 uint8_t sharp_turn_mode=0;
+int active_num=0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -66,25 +67,26 @@ void Obstacle_Avoide(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
 int Calculate_Error(uint8_t sensor_val)
 {
-sensor_val &= 0x7E;	
-if(sensor_val==0) return 9999;
+    sensor_val &= 0x7E;	
+    if(sensor_val==0) return 9999;
 
-long pos=0;
-int active=0;	
+    long pos=0;
+    int active=0;	
 
-if(sensor_val & 0x40) {pos += 1000; active++;} 
-if(sensor_val & 0x20) {pos += 2000; active++;}
-if(sensor_val & 0x10) {pos += 3000; active++;}
-if(sensor_val & 0x08) {pos += 4000;active++;}
-if(sensor_val & 0x04) {pos += 5000;active++;}
-if(sensor_val & 0x02) {pos += 6000;active++;} 
-
-int position = pos / active;
-
-return position-3500;	
+    if(sensor_val & 0x40) {pos += 1000; active++;} 
+    if(sensor_val & 0x20) {pos += 2000; active++;}
+    if(sensor_val & 0x10) {pos += 3000; active++;}
+    if(sensor_val & 0x08) {pos += 4000; active++;}
+    if(sensor_val & 0x04) {pos += 5000; active++;}
+    if(sensor_val & 0x02) {pos += 6000; active++;}
+    int position = pos / active;
+	active_num=active;
+    return position - 3500;	
 }
+//=============================================================
 // 1. PID parameters 
 float Kp = 0.3f;   
 float Ki = 0.0f;    
@@ -99,22 +101,34 @@ int BaseSpeed = 350;
 void PID_Track_Control(int current_error)  
 {
    
-    static int error_history[5] = {0,0,0,0,0};
+    static int error_history[5] = {0,0,0,0,0};//此处的static关键字改变了数组error_history的生命周期，并且使其只被初始化一次
     static uint16_t lost_line_timer = 0;
         
     if(current_error != 9999) 
     {
         lost_line_timer = 0;
     }
-    
-    //1.sharp_turn
-    if(sharp_turn_mode == 1)
+   
+//1.1 trigger a right-angle turn
+if(current_error >= 2000 || (active_num>= 3 && current_error >= 1000)) 
+    { 
+        sharp_turn_mode = 1; 
+        return; //right
+    }
+    if(current_error <= -2000 || (active_num>= 3 && current_error <= -1000)) 
+    { 
+        sharp_turn_mode = 2; 
+        return; //left
+    }	
+	
+//1.2 
+	if(sharp_turn_mode == 1)
     {
-        Motor_SetSpeed(350, -350);
+        Motor_SetSpeed(350, -350);//dead zone lock
        
         if(current_error >= -500 && current_error <= 500 && current_error != 9999)
         {
-            sharp_turn_mode = 0;
+            sharp_turn_mode = 0;//dead zone unlock
             for(int i=0; i<5; i++) error_history[i] = 0; 
         }           
         return;
@@ -129,12 +143,7 @@ void PID_Track_Control(int current_error)
         }   
         return;
     }
-
-   
-    if(current_error >= 2500) { sharp_turn_mode = 1; return; }
-    if(current_error <= -2500) { sharp_turn_mode = 2; return; }
-
-//2.
+//2.software watchdog
     if(current_error == 9999) 
     {
         lost_line_timer++; 
@@ -142,8 +151,8 @@ void PID_Track_Control(int current_error)
         if(lost_line_timer < 15) 
         {
             
-            if(last_error <= -1500) Motor_SetSpeed(100, 300); 
-            else if(last_error >= 1500) Motor_SetSpeed(300, 100);
+            if(last_error <= -1500) Motor_SetSpeed(100,300); 
+            else if(last_error >= 1500) Motor_SetSpeed(300,100);
             else Motor_SetSpeed(0, 0);
         }
         else 
@@ -156,7 +165,8 @@ void PID_Track_Control(int current_error)
         for(int i=0; i<5; i++) error_history[i] = 0;
         return;         
     }
-    // 3.
+	
+// 3.reduce speed when making a sharp turn
     int current_base_speed = BaseSpeed; 
     if(current_error >= 2500 || current_error <= -2500) 
 	{
@@ -167,14 +177,16 @@ void PID_Track_Control(int current_error)
         current_base_speed = 220;
     }
 //4.
-    for(int i = 4; i > 0; i--) {
+    for(int i = 4; i > 0; i--) 
+	{
         error_history[i] = error_history[i-1];
     }
     error_history[0] = current_error;
 
     int window_sum = 0;
-    for(int i = 0; i < 5; i++) {
-        window_sum += error_history[i];
+    for(int i = 0; i < 5; i++) 
+	{
+        window_sum += error_history[i];//sliding‑window integration
     }
 
     float P = Kp * current_error;
